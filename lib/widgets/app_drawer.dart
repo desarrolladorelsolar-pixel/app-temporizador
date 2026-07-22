@@ -3,7 +3,7 @@ import '../screens/home_screen.dart';
 import '../screens/empleados_screen.dart';
 import '../screens/freidoras_screen.dart';
 import '../screens/gestion_temporizadores_screen.dart';
-import '../screens/logs_screen.dart';
+import '../screens/reportes_screen.dart';
 import '../screens/productos_screen.dart';
 
 // ── Drawer lateral compartido entre todas las pantallas ──────────────────────
@@ -142,17 +142,17 @@ class AppDrawer extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // 5. Historial / Logs
+          // 5. Reportes (reemplaza Historial — incluye login + dashboard + PDF)
           _DrawerItem(
-            icono: Icons.history,
-            texto: 'Historial',
-            activo: pantallaActual == 'logs',
+            icono: Icons.bar_chart_rounded,
+            texto: 'Reportes',
+            activo: pantallaActual == 'reportes',
             badge: 'PDF',
             onTap: () {
               Navigator.of(context).pop();
-              if (pantallaActual != 'logs') {
+              if (pantallaActual != 'reportes') {
                 Navigator.of(context).pushAndRemoveUntil(
-                  _rutaSinAnimacion(const LogsScreen()),
+                  _rutaSinAnimacion(const ReportesScreen()),
                   (route) => false,
                 );
               }

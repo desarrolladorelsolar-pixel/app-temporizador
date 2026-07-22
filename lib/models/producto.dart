@@ -1,52 +1,49 @@
 // =============================================================================
-// MODELO: Producto
+// MODELO: Producto — v2.0
 // =============================================================================
-// Representa un producto de cocina (ej: "Pollo Broaster").
-// Cada producto define los tiempos de cocción y tostado que se usan
-// como valores por defecto al crear un temporizador.
+// Cada producto define 3 tiempos:
+//   tiempoCoccion  → Boquilla 1 (ciclo principal)
+//   tiempoTostado  → Boquilla 2 (ciclo principal)
+//   tiempoRepaso   → la boquilla configurada en boquillaRepaso (independiente)
 //
-// Los datos se persisten en la tabla SQLite `producto`.
-// IMPORTANTE: los tiempos se guardan en SEGUNDOS en la BD,
-// pero el modelo los expone en MINUTOS para facilitar la UI.
+// boquillaRepaso indica dónde corre el repaso:
+//   1 → misma boquilla que cocción (Boquilla 1)
+//   2 → misma boquilla que tostado (Boquilla 2)
 // =============================================================================
 
-/// Modelo de datos para un producto de cocina.
 class Producto {
-  /// Identificador único en la BD (null si aún no fue insertado).
   final int? id;
-
-  /// Nombre del producto (ej: "Pollo Broaster", "Alitas").
   final String nombre;
-
-  /// Tiempo de cocción en MINUTOS (se convierte a segundos al guardar en BD).
-  final int tiempoCoccion;
-
-  /// Tiempo de tostado en MINUTOS (se convierte a segundos al guardar en BD).
-  final int tiempoTostado;
+  final int tiempoCoccion;   // en MINUTOS (BD guarda en segundos)
+  final int tiempoTostado;   // en MINUTOS (BD guarda en segundos)
+  final int tiempoRepaso;    // en MINUTOS, 0 = sin repaso (BD guarda en segundos)
+  final int boquillaRepaso;  // 1 = Boquilla 1 (cocción) | 2 = Boquilla 2 (tostado)
 
   Producto({
     this.id,
     required this.nombre,
     required this.tiempoCoccion,
     required this.tiempoTostado,
+    this.tiempoRepaso = 0,
+    this.boquillaRepaso = 1,
   });
 
-  /// Convierte el objeto a un Map para SQLite.
-  /// Los tiempos se multiplican por 60 para guardarlos en segundos.
   Map<String, dynamic> toMap() => {
         if (id != null) 'id_producto': id,
         'nombre': nombre,
-        'tiempo_coccion': tiempoCoccion * 60, // minutos → segundos
-        'tiempo_tostado': tiempoTostado * 60, // minutos → segundos
+        'tiempo_coccion': tiempoCoccion * 60,
+        'tiempo_tostado': tiempoTostado * 60,
+        'tiempo_repaso': tiempoRepaso * 60,
+        'id_boquilla_repaso': boquillaRepaso,
         'estado': 'activo',
       };
 
-  /// Construye un Producto a partir de una fila de SQLite.
-  /// Los tiempos se dividen por 60 para convertir de segundos a minutos.
   factory Producto.fromMap(Map<String, dynamic> m) => Producto(
         id: m['id_producto'] as int?,
         nombre: m['nombre'] as String,
-        tiempoCoccion: ((m['tiempo_coccion'] as int? ?? 0) ~/ 60), // segundos → minutos
-        tiempoTostado: ((m['tiempo_tostado'] as int? ?? 0) ~/ 60), // segundos → minutos
+        tiempoCoccion: ((m['tiempo_coccion'] as int? ?? 0) ~/ 60),
+        tiempoTostado: ((m['tiempo_tostado'] as int? ?? 0) ~/ 60),
+        tiempoRepaso: ((m['tiempo_repaso'] as int? ?? 0) ~/ 60),
+        boquillaRepaso: m['id_boquilla_repaso'] as int? ?? 1,
       );
 }

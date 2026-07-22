@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models/temporizador.dart';
 import '../state/app_state.dart';
 
-// ── Card de temporizador ─────────────────────────────────────────────────────
 class TimerCard extends StatefulWidget {
   final Temporizador temporizador;
   final int index;
@@ -34,31 +33,19 @@ class _TimerCardState extends State<TimerCard> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Pausar temporizador',
-          style: TextStyle(
-              color: Color(0xFFC62828),
-              fontWeight: FontWeight.bold,
-              fontSize: 17),
-        ),
-        content: Text(
-          '¿Pausar "${widget.temporizador.producto.nombre}"?\n'
-          'El tiempo restante se conserva.',
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Pausar temporizador',
+            style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold, fontSize: 17)),
+        content: Text('¿Pausar "${widget.temporizador.producto.nombre}"?\nEl tiempo restante se conserva.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancelar',
-                style: TextStyle(color: Colors.grey[600])),
+            child: Text('Cancelar', style: TextStyle(color: Colors.grey[600])),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Pausar',
-                style: TextStyle(
-                    color: Color(0xFFC62828),
-                    fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -91,20 +78,32 @@ class _TimerCardState extends State<TimerCard> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // ── Header + botón pausa ──────────────────────────────────────
+            // ── Header: botón Repasar | nombre/freidora | botón Pausa ────
             _Header(
               temporizador: t,
               colorFase: colorFase,
               corriendo: corriendo,
+              index: widget.index,
               onPausaTap: _onPausaTap,
             ),
-            const SizedBox(height: 8),
+
+            // ── Banda de repaso (solo si hay repaso activo) ───────────────
+            Selector<AppState, int>(
+              selector: (_, s) => s.segundosRepaso(widget.index),
+              builder: (ctx, segs, _) {
+                if (segs <= 0) return const SizedBox.shrink();
+                return _BandaRepaso(
+                  segundos: segs,
+                  boquilla: t.producto.boquillaRepaso,
+                );
+              },
+            ),
+
+            const SizedBox(height: 4),
+
             // ── Zona central ──────────────────────────────────────────────
             Expanded(
               child: Center(
-                // RepaintBoundary aísla el círculo/botón del resto de la card.
-                // Cuando el timer hace tick, solo se repinta esta zona,
-                // no el header ni la card entera. Crucial en gama baja.
                 child: RepaintBoundary(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -127,8 +126,7 @@ class _TimerCardState extends State<TimerCard> {
                                     key: const ValueKey('pausado'),
                                     colorFase: colorFase,
                                     onDoubleTap: _onDoubleTap,
-                                    estadoAntes:
-                                        t.estadoAntesDePausa ?? 'coccion',
+                                    estadoAntes: t.estadoAntesDePausa ?? 'coccion',
                                   )
                                 : _BotonPlay(
                                     key: const ValueKey('play'),
@@ -146,25 +144,52 @@ class _TimerCardState extends State<TimerCard> {
   }
 }
 
-// ── Header con botón pausa ────────────────────────────────────────────────────
+// ── Header con botón Repasar (izq) | nombre/freidora | botón Pausa (der) ─────
 class _Header extends StatelessWidget {
   final Temporizador temporizador;
   final Color colorFase;
   final bool corriendo;
+  final int index;
   final VoidCallback onPausaTap;
 
   const _Header({
     required this.temporizador,
     required this.colorFase,
     required this.corriendo,
+    required this.index,
     required this.onPausaTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tieneRepaso = temporizador.producto.tiempoRepaso > 0;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Botón Repasar — esquina superior izquierda ────────────────────
+        GestureDetector(
+          onTap: tieneRepaso
+              ? () => context.read<AppState>().iniciarRepaso(index)
+              : null,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: tieneRepaso
+                  ? const Color(0xFFF9A825).withOpacity(0.15)
+                  : Colors.grey[100],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.replay_rounded,
+              size: 18,
+              color: tieneRepaso ? const Color(0xFFF9A825) : Colors.grey[350],
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+
+        // ── Nombre del producto y freidora ────────────────────────────────
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -175,7 +200,7 @@ class _Header extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 19,
+                  fontSize: 17,
                   fontWeight: FontWeight.w900,
                   color: colorFase,
                 ),
@@ -185,7 +210,7 @@ class _Header extends StatelessWidget {
                 temporizador.freidora.codigo,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Colors.grey[500],
                   letterSpacing: 1.2,
@@ -194,7 +219,10 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
-        // Botón pausa — solo visible mientras corre
+
+        const SizedBox(width: 4),
+
+        // ── Botón Pausa — esquina superior derecha ────────────────────────
         if (corriendo)
           GestureDetector(
             onTap: onPausaTap,
@@ -204,14 +232,55 @@ class _Header extends StatelessWidget {
                 color: Colors.grey[100],
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.pause_rounded,
-                size: 20,
-                color: Colors.grey[500],
-              ),
+              child: Icon(Icons.pause_rounded, size: 18, color: Colors.grey[500]),
+            ),
+          )
+        else
+          const SizedBox(width: 26), // espacio reservado para alinear
+      ],
+    );
+  }
+}
+
+// ── Banda de repaso ───────────────────────────────────────────────────────────
+// Aparece debajo del header cuando hay un repaso activo.
+// Color ámbar para diferenciarse de cocción (rojo) y tostado (naranja).
+class _BandaRepaso extends StatelessWidget {
+  final int segundos;
+  final int boquilla;
+
+  const _BandaRepaso({required this.segundos, required this.boquilla});
+
+  @override
+  Widget build(BuildContext context) {
+    final m = segundos ~/ 60;
+    final s = segundos % 60;
+    final tiempo = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9A825).withOpacity(0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFF9A825), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.replay_rounded, size: 12, color: Color(0xFFF57F00)),
+          const SizedBox(width: 4),
+          Text(
+            'REPASO B$boquilla  $tiempo',
+            style: const TextStyle(
+              color: Color(0xFFF57F00),
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }

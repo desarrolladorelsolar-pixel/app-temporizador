@@ -85,7 +85,8 @@ class _TarjetaProducto extends StatelessWidget {
               color: Color(0xFF212121)),
         ),
         subtitle: Text(
-          'Cocción: ${producto.tiempoCoccion} min · Tostado: ${producto.tiempoTostado} min',
+          'B1 Cocción: ${producto.tiempoCoccion} min · B2 Tostado: ${producto.tiempoTostado} min'
+          '${producto.tiempoRepaso > 0 ? ' · Repaso B${producto.boquillaRepaso}: ${producto.tiempoRepaso} min' : ''}',
           style: TextStyle(color: Colors.grey[600], fontSize: 13),
         ),
         trailing: IconButton(
@@ -159,22 +160,24 @@ class _FormProductoState extends State<_FormProducto> {
   late final TextEditingController _nombreCtrl;
   late final TextEditingController _coccionCtrl;
   late final TextEditingController _tostadoCtrl;
+  late final TextEditingController _repasoCtrl;
+  int _boquillaRepaso = 1; // 1 = Boquilla 1 (cocción) | 2 = Boquilla 2 (tostado)
 
   bool get _esEdicion => widget.producto != null;
 
   @override
   void initState() {
     super.initState();
-    _nombreCtrl =
-        TextEditingController(text: widget.producto?.nombre ?? '');
+    _nombreCtrl  = TextEditingController(text: widget.producto?.nombre ?? '');
     _coccionCtrl = TextEditingController(
-        text: widget.producto != null
-            ? widget.producto!.tiempoCoccion.toString()
-            : '');
+        text: widget.producto != null ? widget.producto!.tiempoCoccion.toString() : '');
     _tostadoCtrl = TextEditingController(
-        text: widget.producto != null
-            ? widget.producto!.tiempoTostado.toString()
+        text: widget.producto != null ? widget.producto!.tiempoTostado.toString() : '');
+    _repasoCtrl  = TextEditingController(
+        text: (widget.producto?.tiempoRepaso ?? 0) > 0
+            ? widget.producto!.tiempoRepaso.toString()
             : '');
+    _boquillaRepaso = widget.producto?.boquillaRepaso ?? 1;
   }
 
   @override
@@ -182,6 +185,7 @@ class _FormProductoState extends State<_FormProducto> {
     _nombreCtrl.dispose();
     _coccionCtrl.dispose();
     _tostadoCtrl.dispose();
+    _repasoCtrl.dispose();
     super.dispose();
   }
 
@@ -252,7 +256,7 @@ class _FormProductoState extends State<_FormProducto> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _labelF('COCCIÓN (MIN)'),
+                        _labelF('COCCIÓN — B1 (MIN)'),
                         const SizedBox(height: 8),
                         _campoTiempo(_coccionCtrl, 'Ej. 10'),
                       ],
@@ -263,13 +267,33 @@ class _FormProductoState extends State<_FormProducto> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _labelF('TOSTADO (MIN)'),
+                        _labelF('TOSTADO — B2 (MIN)'),
                         const SizedBox(height: 8),
                         _campoTiempo(_tostadoCtrl, 'Ej. 10'),
                       ],
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+
+              // Repaso + selector de boquilla
+              _labelF('REPASO (MIN) — OPCIONAL'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _campoTiempoOpcional(_repasoCtrl, 'Ej. 2')),
+                  const SizedBox(width: 12),
+                  _SelectorBoquilla(
+                    valor: _boquillaRepaso,
+                    onChanged: (v) => setState(() => _boquillaRepaso = v),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Boquilla donde se hace el repaso: B1 = Cocción · B2 = Tostado',
+                style: TextStyle(color: Colors.grey[500], fontSize: 11),
               ),
               const SizedBox(height: 24),
 
@@ -343,6 +367,8 @@ class _FormProductoState extends State<_FormProducto> {
           nombre: _nombreCtrl.text.trim(),
           tiempoCoccion: int.tryParse(_coccionCtrl.text) ?? 0,
           tiempoTostado: int.tryParse(_tostadoCtrl.text) ?? 0,
+          tiempoRepaso: int.tryParse(_repasoCtrl.text) ?? 0,
+          boquillaRepaso: _boquillaRepaso,
         ),
       );
     } else {
@@ -350,8 +376,111 @@ class _FormProductoState extends State<_FormProducto> {
         nombre: _nombreCtrl.text.trim(),
         tiempoCoccion: int.tryParse(_coccionCtrl.text) ?? 0,
         tiempoTostado: int.tryParse(_tostadoCtrl.text) ?? 0,
+        tiempoRepaso: int.tryParse(_repasoCtrl.text) ?? 0,
+        boquillaRepaso: _boquillaRepaso,
       ));
     }
     Navigator.of(context).pop();
+  }
+
+  Widget _campoTiempoOpcional(TextEditingController ctrl, String hint) =>
+      TextFormField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        decoration: _deco(hint),
+        // Sin validator — el repaso es opcional (0 = sin repaso)
+      );
+}
+
+// ── Selector de boquilla para el repaso ──────────────────────────────────────
+class _SelectorBoquilla extends StatelessWidget {
+  final int valor;
+  final ValueChanged<int> onChanged;
+
+  const _SelectorBoquilla({required this.valor, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'BOQUILLA',
+          style: TextStyle(
+              color: Color(0xFFC62828),
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+              letterSpacing: 0.8),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ChipBoquilla(
+              etiqueta: 'B1',
+              subtitulo: 'Cocción',
+              activo: valor == 1,
+              onTap: () => onChanged(1),
+            ),
+            const SizedBox(width: 8),
+            _ChipBoquilla(
+              etiqueta: 'B2',
+              subtitulo: 'Tostado',
+              activo: valor == 2,
+              onTap: () => onChanged(2),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ChipBoquilla extends StatelessWidget {
+  final String etiqueta;
+  final String subtitulo;
+  final bool activo;
+  final VoidCallback onTap;
+
+  const _ChipBoquilla({
+    required this.etiqueta,
+    required this.subtitulo,
+    required this.activo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: activo ? const Color(0xFFC62828) : const Color(0xFFF1F1F1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          children: [
+            Text(
+              etiqueta,
+              style: TextStyle(
+                color: activo ? Colors.white : const Color(0xFF424242),
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            Text(
+              subtitulo,
+              style: TextStyle(
+                color: activo ? Colors.white70 : Colors.grey[500],
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

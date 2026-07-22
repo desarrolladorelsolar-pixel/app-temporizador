@@ -1,48 +1,24 @@
 // =============================================================================
-// MODELO: LogEntry
+// MODELO: LogEntry — v2.0
 // =============================================================================
-// Representa un registro histórico de una cocción completada.
-// Se guarda en la tabla SQLite `log` y NO se modifica una vez cerrado.
-//
-// DATOS "FOTOGRÁFICOS":
-//   Los campos nombre_empleado, nombre_freidora y nombre_producto se guardan
-//   como texto en el momento del registro. Esto garantiza que el historial
-//   no se altere aunque luego se editen o eliminen esos datos maestros.
-//
-// TIPOS:
-//   'coccion'    → registro normal de un ciclo completado (aparece en PDF)
-//   'eliminacion'→ auditoría interna (NO aparece en la app ni en PDF)
+// Representa un registro histórico de una fase de cocción.
+// v2.0: cada ciclo genera DOS logs — uno por boquilla:
+//   boquilla 1 → se abre al iniciar cocción, se cierra al terminar cocción
+//   boquilla 2 → se abre al iniciar tostado, se cierra al terminar tostado
+// Los logs anteriores (pre v5) tienen boquilla=1 por compatibilidad.
 // =============================================================================
 
-/// Modelo de un registro del historial de cocciones.
 class LogEntry {
-  /// Identificador único en la BD.
   final int? id;
-
-  /// ID del temporizador que generó este log (referencia FK).
   final int idTemporizador;
-
-  /// ID del empleado que inició la cocción (referencia FK).
   final int idEmpleado;
-
-  /// Nombre del empleado en el momento del registro (dato fotográfico).
-  final String nombreEmpleado;
-
-  /// Código de la freidora en el momento del registro (dato fotográfico).
-  final String nombreFreidora;
-
-  /// Nombre del producto en el momento del registro (dato fotográfico).
-  final String nombreProducto;
-
-  /// Fecha y hora exacta en que se presionó play para iniciar la cocción.
+  final String nombreEmpleado;  // dato "fotográfico" al momento del registro
+  final String nombreFreidora;  // dato "fotográfico"
+  final String nombreProducto;  // dato "fotográfico"
   final DateTime fechaHoraInicio;
-
-  /// Fecha y hora exacta de finalización del ciclo completo (cocción + tostado).
-  /// Es null si el ciclo aún no terminó (log abierto).
-  final DateTime? fechaHoraFin;
-
-  /// Tipo del registro: 'coccion' (visible) | 'eliminacion' (auditoría interna).
-  final String tipo;
+  final DateTime? fechaHoraFin; // null si aún no terminó
+  final String tipo;            // 'coccion' (visible) | 'eliminacion' (auditoría)
+  final int boquilla;           // 1 = Boquilla 1 (cocción) | 2 = Boquilla 2 (tostado)
 
   LogEntry({
     this.id,
@@ -54,9 +30,9 @@ class LogEntry {
     required this.fechaHoraInicio,
     this.fechaHoraFin,
     this.tipo = 'coccion',
+    this.boquilla = 1,
   });
 
-  /// Convierte el objeto a un Map para insertar en SQLite.
   Map<String, dynamic> toMap() => {
         if (id != null) 'id_log': id,
         'id_temporizador': idTemporizador,
@@ -67,9 +43,9 @@ class LogEntry {
         'fecha_hora_inicio': fechaHoraInicio.toIso8601String(),
         'fecha_hora_fin': fechaHoraFin?.toIso8601String(),
         'tipo': tipo,
+        'boquilla': boquilla,
       };
 
-  /// Construye un LogEntry desde una fila de SQLite.
   factory LogEntry.fromMap(Map<String, dynamic> m) => LogEntry(
         id: m['id_log'] as int?,
         idTemporizador: m['id_temporizador'] as int,
@@ -82,10 +58,10 @@ class LogEntry {
             ? DateTime.parse(m['fecha_hora_fin'] as String)
             : null,
         tipo: m['tipo'] as String? ?? 'coccion',
+        boquilla: m['boquilla'] as int? ?? 1,
       );
 
-  /// Retorna la duración del ciclo en formato legible "Xm Ys".
-  /// Retorna '—' si el log aún está abierto (sin fecha_hora_fin).
+  /// Duración en formato "Xm Ys". Retorna '—' si el log aún no está cerrado.
   String get duracionFormateada {
     if (fechaHoraFin == null) return '—';
     final diff = fechaHoraFin!.difference(fechaHoraInicio);

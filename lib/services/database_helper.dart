@@ -26,11 +26,9 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
-      // sqflite no permite db.execute() en onOpen — los PRAGMAs de
-      // optimización van en onCreate/onUpgrade o se aplican por separado
     );
   }
 
@@ -55,13 +53,24 @@ class DatabaseHelper {
           "ALTER TABLE log ADD COLUMN tipo TEXT NOT NULL DEFAULT 'coccion'");
     }
     if (oldVersion < 4) {
-      // v4: persistir estado de pausa para recuperarlo al reabrir la app
       await db.execute(
           'ALTER TABLE temporizador ADD COLUMN tiempo_coccion_restante INTEGER');
       await db.execute(
           'ALTER TABLE temporizador ADD COLUMN tiempo_tostado_restante INTEGER');
       await db.execute(
           'ALTER TABLE temporizador ADD COLUMN estado_antes_pausa TEXT');
+    }
+    if (oldVersion < 5) {
+      // v5: tiempo de repaso + boquilla en producto, boquilla en log
+      await db.execute(
+          'ALTER TABLE producto ADD COLUMN tiempo_repaso INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE producto ADD COLUMN id_boquilla_repaso INTEGER NOT NULL DEFAULT 1');
+      await db.execute(
+          'ALTER TABLE log ADD COLUMN boquilla INTEGER NOT NULL DEFAULT 1');
+      // Índice para reportes por freidora
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_log_freidora ON log(nombre_freidora)');
     }
   }
 
@@ -70,11 +79,13 @@ class DatabaseHelper {
 
     await db.execute('''
       CREATE TABLE producto (
-        id_producto     INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre          TEXT NOT NULL,
-        tiempo_coccion  INTEGER NOT NULL,
-        tiempo_tostado  INTEGER NOT NULL,
-        estado          TEXT NOT NULL DEFAULT 'activo'
+        id_producto        INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre             TEXT NOT NULL,
+        tiempo_coccion     INTEGER NOT NULL,
+        tiempo_tostado     INTEGER NOT NULL,
+        tiempo_repaso      INTEGER NOT NULL DEFAULT 0,
+        id_boquilla_repaso INTEGER NOT NULL DEFAULT 1,
+        estado             TEXT NOT NULL DEFAULT 'activo'
           CHECK (estado IN ('activo','inactivo'))
       )
     ''');
@@ -126,6 +137,7 @@ class DatabaseHelper {
         fecha_hora_inicio  TEXT NOT NULL,
         fecha_hora_fin     TEXT,
         tipo               TEXT NOT NULL DEFAULT 'coccion',
+        boquilla           INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (id_temporizador) REFERENCES temporizador(id_temporizador) ON DELETE RESTRICT,
         FOREIGN KEY (id_empleado)     REFERENCES empleado(id_empleado) ON DELETE RESTRICT
       )
@@ -142,6 +154,8 @@ class DatabaseHelper {
         'CREATE INDEX idx_log_empleado ON log(id_empleado)');
     await db.execute(
         'CREATE INDEX idx_log_fecha_inicio ON log(fecha_hora_inicio)');
+    await db.execute(
+        'CREATE INDEX idx_log_freidora ON log(nombre_freidora)');
   }
 
   // ── EMPLEADOS ──────────────────────────────────────────────────────────────
@@ -211,7 +225,8 @@ class DatabaseHelper {
   Future<List<Producto>> getProductos() async {
     final d = await db;
     final rows = await d.query('producto',
-        columns: ['id_producto', 'nombre', 'tiempo_coccion', 'tiempo_tostado'],
+        columns: ['id_producto', 'nombre', 'tiempo_coccion', 'tiempo_tostado',
+                  'tiempo_repaso', 'id_boquilla_repaso'],
         where: "estado = 'activo'",
         orderBy: 'nombre ASC');
     return rows.map(Producto.fromMap).toList();
@@ -235,6 +250,8 @@ class DatabaseHelper {
         'nombre': p.nombre,
         'tiempo_coccion': p.tiempoCoccion * 60,
         'tiempo_tostado': p.tiempoTostado * 60,
+        'tiempo_repaso': p.tiempoRepaso * 60,
+        'id_boquilla_repaso': p.boquillaRepaso,
       },
       where: 'id_producto = ?',
       whereArgs: [p.id],
@@ -396,5 +413,88 @@ class DatabaseHelper {
       orderBy: 'fecha_hora_inicio DESC',
     );
     return rows.map(LogEntry.fromMap).toList();
+  }
+
+  // ── REPORTES ───────────────────────────────────────────────────────────────
+
+  /// Logs de una freidora específica filtrados por boquilla y/o rango de fechas.
+  /// [boquilla] null = ambas boquillas, 1 = cocción, 2 = tostado.
+  /// [desde] / [hasta] formato YYYY-MM-DD, null = sin límite.
+  Future<List<LogEntry>> getLogsPorFreidora({
+    required String nombreFreidora,
+    int? boquilla,
+    String? desde,
+    String? hasta,
+  }) async {
+    final d = await db;
+
+    final List<String> condiciones = [
+      "tipo = 'coccion'",
+      "nombre_freidora = ?",
+    ];
+    final List<dynamic> args = [nombreFreidora];
+
+    if (boquilla != null) {
+      condiciones.add('boquilla = ?');
+      args.add(boquilla);
+    }
+    if (desde != null) {
+      condiciones.add("fecha_hora_inicio >= ?");
+      args.add('${desde}T00:00:00');
+    }
+    if (hasta != null) {
+      condiciones.add("fecha_hora_inicio <= ?");
+      args.add('${hasta}T23:59:59');
+    }
+
+    final rows = await d.query(
+      'log',
+      where: condiciones.join(' AND '),
+      whereArgs: args,
+      orderBy: 'fecha_hora_inicio DESC',
+      limit: 500,
+    );
+    return rows.map(LogEntry.fromMap).toList();
+  }
+
+  /// Estadísticas agregadas para el reporte de una freidora.
+  /// Devuelve: totalCoccion, totalTostado, promedioSegundos.
+  Future<Map<String, dynamic>> getEstadisticasFreidora({
+    required String nombreFreidora,
+    String? desde,
+    String? hasta,
+  }) async {
+    final d = await db;
+
+    String where = "tipo = 'coccion' AND nombre_freidora = ? AND fecha_hora_fin IS NOT NULL";
+    final List<dynamic> args = [nombreFreidora];
+
+    if (desde != null) {
+      where += " AND fecha_hora_inicio >= '${desde}T00:00:00'";
+    }
+    if (hasta != null) {
+      where += " AND fecha_hora_inicio <= '${hasta}T23:59:59'";
+    }
+
+    final rows = await d.rawQuery('''
+      SELECT
+        SUM(CASE WHEN boquilla = 1 THEN 1 ELSE 0 END) AS total_coccion,
+        SUM(CASE WHEN boquilla = 2 THEN 1 ELSE 0 END) AS total_tostado,
+        CAST(AVG(
+          (julianday(fecha_hora_fin) - julianday(fecha_hora_inicio)) * 86400
+        ) AS INTEGER) AS promedio_seg
+      FROM log
+      WHERE $where
+    ''', args);
+
+    if (rows.isEmpty) {
+      return {'total_coccion': 0, 'total_tostado': 0, 'promedio_seg': 0};
+    }
+    final r = rows.first;
+    return {
+      'total_coccion': r['total_coccion'] as int? ?? 0,
+      'total_tostado': r['total_tostado'] as int? ?? 0,
+      'promedio_seg': r['promedio_seg'] as int? ?? 0,
+    };
   }
 }
