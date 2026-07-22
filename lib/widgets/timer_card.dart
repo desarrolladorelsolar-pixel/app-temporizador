@@ -19,6 +19,8 @@ class TimerCard extends StatefulWidget {
 }
 
 class _TimerCardState extends State<TimerCard> {
+
+  // ── Doble tap: inicia o reanuda el temporizador ───────────────────────────
   void _onDoubleTap() {
     final t = widget.temporizador;
     if (t.corriendo) return;
@@ -29,23 +31,78 @@ class _TimerCardState extends State<TimerCard> {
     }
   }
 
+  // ── Botón Repasar: pide boquilla y arranca el countdown de repaso ─────────
+  Future<void> _onRepasoTap() async {
+    final t = widget.temporizador;
+    if (t.producto.tiempoRepaso <= 0) return;
+
+    final boquilla = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          '¿En qué boquilla?',
+          style: TextStyle(
+              color: Color(0xFFC62828),
+              fontWeight: FontWeight.bold,
+              fontSize: 17),
+        ),
+        content: Text(
+          '${t.producto.nombre}\n'
+          'Repaso: ${t.producto.tiempoRepaso} min',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actionsAlignment: MainAxisAlignment.spaceEvenly,
+        actions: [
+          _BotonBoquilla(
+              numero: 1,
+              subtitulo: 'Cocción',
+              onTap: () => Navigator.of(ctx).pop(1)),
+          _BotonBoquilla(
+              numero: 2,
+              subtitulo: 'Tostado',
+              onTap: () => Navigator.of(ctx).pop(2)),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('Cancelar',
+                style: TextStyle(color: Colors.grey[600])),
+          ),
+        ],
+      ),
+    );
+
+    if (boquilla != null && mounted) {
+      context.read<AppState>().iniciarRepaso(widget.index, boquilla);
+    }
+  }
+
+  // ── Botón Pausa: pide confirmación ────────────────────────────────────────
   Future<void> _onPausaTap() async {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Pausar temporizador',
-            style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold, fontSize: 17)),
-        content: Text('¿Pausar "${widget.temporizador.producto.nombre}"?\nEl tiempo restante se conserva.'),
+            style: TextStyle(
+                color: Color(0xFFC62828),
+                fontWeight: FontWeight.bold,
+                fontSize: 17)),
+        content: Text(
+          '¿Pausar "${widget.temporizador.producto.nombre}"?\n'
+          'El tiempo restante se conserva.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancelar', style: TextStyle(color: Colors.grey[600])),
+            child: Text('Cancelar',
+                style: TextStyle(color: Colors.grey[600])),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Pausar',
-                style: TextStyle(color: Color(0xFFC62828), fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: Color(0xFFC62828),
+                    fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -85,17 +142,20 @@ class _TimerCardState extends State<TimerCard> {
               corriendo: corriendo,
               index: widget.index,
               onPausaTap: _onPausaTap,
+              onRepasoTap: _onRepasoTap,
             ),
 
-            // ── Banda de repaso (solo si hay repaso activo) ───────────────
-            Selector<AppState, int>(
-              selector: (_, s) => s.segundosRepaso(widget.index),
-              builder: (ctx, segs, _) {
-                if (segs <= 0) return const SizedBox.shrink();
-                return _BandaRepaso(
-                  segundos: segs,
-                  boquilla: t.producto.boquillaRepaso,
-                );
+            // ── Banda de repaso ───────────────────────────────────────────
+            Selector<AppState, (int, int?)>(
+              selector: (_, s) => (
+                s.segundosRepaso(widget.index),
+                s.boquillaRepasoActivo(widget.index),
+              ),
+              builder: (ctx, data, _) {
+                final segs = data.$1;
+                final bq   = data.$2;
+                if (segs <= 0 || bq == null) return const SizedBox.shrink();
+                return _BandaRepaso(segundos: segs, boquilla: bq);
               },
             ),
 
@@ -151,6 +211,7 @@ class _Header extends StatelessWidget {
   final bool corriendo;
   final int index;
   final VoidCallback onPausaTap;
+  final VoidCallback onRepasoTap;
 
   const _Header({
     required this.temporizador,
@@ -158,6 +219,7 @@ class _Header extends StatelessWidget {
     required this.corriendo,
     required this.index,
     required this.onPausaTap,
+    required this.onRepasoTap,
   });
 
   @override
@@ -167,11 +229,9 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Botón Repasar — esquina superior izquierda ────────────────────
+        // ── Botón Repasar — siempre visible ──────────────────────────────
         GestureDetector(
-          onTap: tieneRepaso
-              ? () => context.read<AppState>().iniciarRepaso(index)
-              : null,
+          onTap: tieneRepaso ? onRepasoTap : null,
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -183,13 +243,15 @@ class _Header extends StatelessWidget {
             child: Icon(
               Icons.replay_rounded,
               size: 18,
-              color: tieneRepaso ? const Color(0xFFF9A825) : Colors.grey[350],
+              color: tieneRepaso
+                  ? const Color(0xFFF9A825)
+                  : Colors.grey[350],
             ),
           ),
         ),
         const SizedBox(width: 4),
 
-        // ── Nombre del producto y freidora ────────────────────────────────
+        // ── Nombre y freidora ─────────────────────────────────────────────
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -222,7 +284,7 @@ class _Header extends StatelessWidget {
 
         const SizedBox(width: 4),
 
-        // ── Botón Pausa — esquina superior derecha ────────────────────────
+        // ── Botón Pausa — solo mientras corre ────────────────────────────
         if (corriendo)
           GestureDetector(
             onTap: onPausaTap,
@@ -236,15 +298,61 @@ class _Header extends StatelessWidget {
             ),
           )
         else
-          const SizedBox(width: 26), // espacio reservado para alinear
+          const SizedBox(width: 26),
       ],
     );
   }
 }
 
+// ── Botón de selección de boquilla en el diálogo de repaso ───────────────────
+class _BotonBoquilla extends StatelessWidget {
+  final int numero;
+  final String subtitulo;
+  final VoidCallback onTap;
+
+  const _BotonBoquilla({
+    required this.numero,
+    required this.subtitulo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFCEAEA),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFC62828), width: 1.5),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'B$numero',
+              style: const TextStyle(
+                color: Color(0xFFC62828),
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            Text(
+              subtitulo,
+              style: const TextStyle(
+                color: Color(0xFFC62828),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Banda de repaso ───────────────────────────────────────────────────────────
-// Aparece debajo del header cuando hay un repaso activo.
-// Color ámbar para diferenciarse de cocción (rojo) y tostado (naranja).
 class _BandaRepaso extends StatelessWidget {
   final int segundos;
   final int boquilla;
@@ -285,24 +393,19 @@ class _BandaRepaso extends StatelessWidget {
   }
 }
 
-// ── Botón Play (cocción) ──────────────────────────────────────────────────────
+// ── Botón Play ────────────────────────────────────────────────────────────────
 class _BotonPlay extends StatelessWidget {
   final Color colorFase;
   final VoidCallback onDoubleTap;
 
-  const _BotonPlay({
-    super.key,
-    required this.colorFase,
-    required this.onDoubleTap,
-  });
+  const _BotonPlay({super.key, required this.colorFase, required this.onDoubleTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onDoubleTap: onDoubleTap,
       child: Container(
-        width: 130,
-        height: 130,
+        width: 130, height: 130,
         decoration: BoxDecoration(
           color: colorFase,
           shape: BoxShape.circle,
@@ -314,17 +417,13 @@ class _BotonPlay extends StatelessWidget {
             ),
           ],
         ),
-        child: const Icon(
-          Icons.play_arrow_rounded,
-          color: Colors.white,
-          size: 80,
-        ),
+        child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 80),
       ),
     );
   }
 }
 
-// ── Botón Pausado (doble tap para reanudar) ───────────────────────────────────
+// ── Botón Pausado ─────────────────────────────────────────────────────────────
 class _BotonPausado extends StatelessWidget {
   final Color colorFase;
   final VoidCallback onDoubleTap;
@@ -342,8 +441,7 @@ class _BotonPausado extends StatelessWidget {
     return GestureDetector(
       onDoubleTap: onDoubleTap,
       child: Container(
-        width: 130,
-        height: 130,
+        width: 130, height: 130,
         decoration: BoxDecoration(
           color: Colors.grey[200],
           shape: BoxShape.circle,
@@ -376,10 +474,9 @@ class _BotonPausado extends StatelessWidget {
   }
 }
 
-// ── Botón pulsante "Iniciar tostado" ──────────────────────────────────────────
+// ── Botón Espera Tostado ──────────────────────────────────────────────────────
 class _BotonEsperaTostado extends StatefulWidget {
   final VoidCallback onDoubleTap;
-
   const _BotonEsperaTostado({super.key, required this.onDoubleTap});
 
   @override
@@ -417,8 +514,7 @@ class _BotonEsperaTostadoState extends State<_BotonEsperaTostado>
       child: ScaleTransition(
         scale: _escala,
         child: Container(
-          width: 130,
-          height: 130,
+          width: 130, height: 130,
           decoration: const BoxDecoration(
             color: naranja,
             shape: BoxShape.circle,
@@ -467,14 +563,10 @@ class _CirculoProgreso extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final int seg = enCoccion
-        ? temporizador.tiempoCoccionRestante
-        : temporizador.tiempoTostadoRestante;
-
+    final int seg   = enCoccion ? temporizador.tiempoCoccionRestante : temporizador.tiempoTostadoRestante;
     final int total = enCoccion
         ? temporizador.producto.tiempoCoccion * 60
         : temporizador.producto.tiempoTostado * 60;
-
     final double progreso = total > 0 ? (total - seg) / total : 1.0;
     final String etiqueta = enCoccion ? 'COCCIÓN' : 'TOSTADO';
 
@@ -482,24 +574,20 @@ class _CirculoProgreso extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 130,
-          height: 130,
+          width: 130, height: 130,
           child: Stack(
             alignment: Alignment.center,
             children: [
               SizedBox(
-                width: 130,
-                height: 130,
+                width: 130, height: 130,
                 child: CircularProgressIndicator(
                   value: 1.0,
                   strokeWidth: 8,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(Colors.grey[200]!),
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.grey[200]!),
                 ),
               ),
               SizedBox(
-                width: 130,
-                height: 130,
+                width: 130, height: 130,
                 child: CircularProgressIndicator(
                   value: progreso,
                   strokeWidth: 8,

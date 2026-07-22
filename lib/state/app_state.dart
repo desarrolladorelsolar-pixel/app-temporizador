@@ -30,6 +30,10 @@ class AppState extends ChangeNotifier {
   final Map<int, Timer> _repasoTimers = {};
   // Segundos restantes del repaso por índice (0 = sin repaso activo)
   final Map<int, int> _repasoRestante = {};
+  // Boquilla elegida para el repaso activo (1 o 2)
+  final Map<int, int> _repasosBoquilla = {};
+  // ID del log abierto para el repaso activo
+  final Map<int, int> _repasoLogIds = {};
 
   bool _disposed = false;
 
@@ -198,7 +202,7 @@ class AppState extends ChangeNotifier {
     productos.add(Producto(
       id: id, nombre: p.nombre,
       tiempoCoccion: p.tiempoCoccion, tiempoTostado: p.tiempoTostado,
-      tiempoRepaso: p.tiempoRepaso, boquillaRepaso: p.boquillaRepaso,
+      tiempoRepaso: p.tiempoRepaso,
     ));
     notifyListeners();
   }
@@ -443,8 +447,13 @@ class AppState extends ChangeNotifier {
   /// Segundos restantes del repaso (0 si no hay repaso)
   int segundosRepaso(int index) => _repasoRestante[index] ?? 0;
 
-  /// Inicia el countdown de repaso. Si ya hay uno activo, lo reinicia.
-  void iniciarRepaso(int index) {
+  /// Boquilla del repaso activo (1 o 2), null si no hay repaso
+  int? boquillaRepasoActivo(int index) => _repasosBoquilla[index];
+
+  /// Inicia el countdown de repaso en la [boquilla] elegida por el usuario.
+  /// Si ya hay uno activo, lo cancela y reinicia.
+  /// Guarda un log con tipo 'repaso' y la boquilla seleccionada.
+  Future<void> iniciarRepaso(int index, int boquilla) async {
     if (index >= temporizadores.length) return;
     final t = temporizadores[index];
     if (t.producto.tiempoRepaso <= 0) return;
@@ -453,6 +462,26 @@ class AppState extends ChangeNotifier {
     _cancelarRepaso(index);
 
     _repasoRestante[index] = t.producto.tiempoRepaso * 60;
+    _repasosBoquilla[index] = boquilla;
+
+    // Guarda log del repaso con la boquilla seleccionada
+    final responsable = empleadoActivo ?? (empleados.isNotEmpty ? empleados.first : null);
+    if (t.id != null && t.id! > 0 && responsable != null) {
+      final ahora = DateTime.now();
+      final logId = await DatabaseHelper.instance.insertLog(LogEntry(
+        idTemporizador: t.id!,
+        idEmpleado: responsable.id ?? 0,
+        nombreEmpleado: responsable.nombre,
+        nombreFreidora: t.freidora.codigo,
+        nombreProducto: t.producto.nombre,
+        fechaHoraInicio: ahora,
+        tipo: 'repaso',
+        boquilla: boquilla,
+      ));
+      // Cierra el log del repaso cuando termine
+      _repasoLogIds[index] = logId;
+    }
+
     _repasoTimers[index] = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _tickRepaso(index),
@@ -466,7 +495,15 @@ class AppState extends ChangeNotifier {
       _repasoRestante[index] = 0;
       _repasoTimers[index]?.cancel();
       _repasoTimers.remove(index);
-      AudioService.sonarFin(); // beep al terminar el repaso
+      _repasosBoquilla.remove(index);
+
+      // Cierra el log del repaso con fecha/hora exacta
+      final logId = _repasoLogIds.remove(index);
+      if (logId != null && logId > 0) {
+        DatabaseHelper.instance.cerrarLogConFecha(logId, DateTime.now());
+      }
+
+      AudioService.sonarFin();
     } else {
       _repasoRestante[index] = seg;
     }
@@ -477,6 +514,8 @@ class AppState extends ChangeNotifier {
     _repasoTimers[index]?.cancel();
     _repasoTimers.remove(index);
     _repasoRestante.remove(index);
+    _repasosBoquilla.remove(index);
+    _repasoLogIds.remove(index);
   }
 
   // ── LOGS ───────────────────────────────────────────────────────────────────
@@ -497,6 +536,8 @@ class AppState extends ChangeNotifier {
     _logIds.clear();
     _repasoTimers.clear();
     _repasoRestante.clear();
+    _repasosBoquilla.clear();
+    _repasoLogIds.clear();
     super.dispose();
   }
 }

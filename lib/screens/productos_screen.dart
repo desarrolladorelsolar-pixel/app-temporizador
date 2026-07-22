@@ -86,7 +86,7 @@ class _TarjetaProducto extends StatelessWidget {
         ),
         subtitle: Text(
           'B1 Cocción: ${producto.tiempoCoccion} min · B2 Tostado: ${producto.tiempoTostado} min'
-          '${producto.tiempoRepaso > 0 ? ' · Repaso B${producto.boquillaRepaso}: ${producto.tiempoRepaso} min' : ''}',
+          '${producto.tiempoRepaso > 0 ? ' · Repaso: ${producto.tiempoRepaso} min' : ''}',
           style: TextStyle(color: Colors.grey[600], fontSize: 13),
         ),
         trailing: IconButton(
@@ -161,7 +161,6 @@ class _FormProductoState extends State<_FormProducto> {
   late final TextEditingController _coccionCtrl;
   late final TextEditingController _tostadoCtrl;
   late final TextEditingController _repasoCtrl;
-  int _boquillaRepaso = 1; // 1 = Boquilla 1 (cocción) | 2 = Boquilla 2 (tostado)
 
   bool get _esEdicion => widget.producto != null;
 
@@ -177,7 +176,6 @@ class _FormProductoState extends State<_FormProducto> {
         text: (widget.producto?.tiempoRepaso ?? 0) > 0
             ? widget.producto!.tiempoRepaso.toString()
             : '');
-    _boquillaRepaso = widget.producto?.boquillaRepaso ?? 1;
   }
 
   @override
@@ -277,22 +275,14 @@ class _FormProductoState extends State<_FormProducto> {
               ),
               const SizedBox(height: 16),
 
-              // Repaso + selector de boquilla
+              // Repaso — campo opcional, sin selector de boquilla
+              // (la boquilla se elige al tocar el botón Repasar en la card)
               _labelF('REPASO (MIN) — OPCIONAL'),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: _campoTiempoOpcional(_repasoCtrl, 'Ej. 2')),
-                  const SizedBox(width: 12),
-                  _SelectorBoquilla(
-                    valor: _boquillaRepaso,
-                    onChanged: (v) => setState(() => _boquillaRepaso = v),
-                  ),
-                ],
-              ),
+              _campoTiempoOpcional(_repasoCtrl, 'Ej. 2'),
               const SizedBox(height: 4),
               Text(
-                'Boquilla donde se hace el repaso: B1 = Cocción · B2 = Tostado',
+                'La boquilla se elige al momento de repasar.',
                 style: TextStyle(color: Colors.grey[500], fontSize: 11),
               ),
               const SizedBox(height: 24),
@@ -368,7 +358,6 @@ class _FormProductoState extends State<_FormProducto> {
           tiempoCoccion: int.tryParse(_coccionCtrl.text) ?? 0,
           tiempoTostado: int.tryParse(_tostadoCtrl.text) ?? 0,
           tiempoRepaso: int.tryParse(_repasoCtrl.text) ?? 0,
-          boquillaRepaso: _boquillaRepaso,
         ),
       );
     } else {
@@ -377,7 +366,6 @@ class _FormProductoState extends State<_FormProducto> {
         tiempoCoccion: int.tryParse(_coccionCtrl.text) ?? 0,
         tiempoTostado: int.tryParse(_tostadoCtrl.text) ?? 0,
         tiempoRepaso: int.tryParse(_repasoCtrl.text) ?? 0,
-        boquillaRepaso: _boquillaRepaso,
       ));
     }
     Navigator.of(context).pop();

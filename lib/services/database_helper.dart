@@ -65,8 +65,6 @@ class DatabaseHelper {
       await db.execute(
           'ALTER TABLE producto ADD COLUMN tiempo_repaso INTEGER NOT NULL DEFAULT 0');
       await db.execute(
-          'ALTER TABLE producto ADD COLUMN id_boquilla_repaso INTEGER NOT NULL DEFAULT 1');
-      await db.execute(
           'ALTER TABLE log ADD COLUMN boquilla INTEGER NOT NULL DEFAULT 1');
       // Índice para reportes por freidora
       await db.execute(
@@ -84,7 +82,6 @@ class DatabaseHelper {
         tiempo_coccion     INTEGER NOT NULL,
         tiempo_tostado     INTEGER NOT NULL,
         tiempo_repaso      INTEGER NOT NULL DEFAULT 0,
-        id_boquilla_repaso INTEGER NOT NULL DEFAULT 1,
         estado             TEXT NOT NULL DEFAULT 'activo'
           CHECK (estado IN ('activo','inactivo'))
       )
@@ -225,8 +222,7 @@ class DatabaseHelper {
   Future<List<Producto>> getProductos() async {
     final d = await db;
     final rows = await d.query('producto',
-        columns: ['id_producto', 'nombre', 'tiempo_coccion', 'tiempo_tostado',
-                  'tiempo_repaso', 'id_boquilla_repaso'],
+        columns: ['id_producto', 'nombre', 'tiempo_coccion', 'tiempo_tostado', 'tiempo_repaso'],
         where: "estado = 'activo'",
         orderBy: 'nombre ASC');
     return rows.map(Producto.fromMap).toList();
@@ -251,7 +247,6 @@ class DatabaseHelper {
         'tiempo_coccion': p.tiempoCoccion * 60,
         'tiempo_tostado': p.tiempoTostado * 60,
         'tiempo_repaso': p.tiempoRepaso * 60,
-        'id_boquilla_repaso': p.boquillaRepaso,
       },
       where: 'id_producto = ?',
       whereArgs: [p.id],
@@ -395,8 +390,7 @@ class DatabaseHelper {
         'nombre_empleado', 'nombre_freidora', 'nombre_producto',
         'fecha_hora_inicio', 'fecha_hora_fin', 'tipo'
       ],
-      where: "tipo = 'coccion'",
-      orderBy: 'fecha_hora_inicio DESC',
+      where: "tipo = 'coccion'",      orderBy: 'fecha_hora_inicio DESC',
       // Límite de seguridad — evita cargar miles de logs en RAM
       limit: 500,
     );
