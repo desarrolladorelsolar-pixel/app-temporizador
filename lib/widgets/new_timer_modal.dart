@@ -7,16 +7,18 @@ import '../models/producto.dart';
 import '../models/temporizador.dart';
 import '../screens/freidoras_screen.dart';
 import '../screens/productos_screen.dart';
+import '../screens/empleados_screen.dart';
 
 // ── Función helper: muestra el modal o aviso de prerequisitos ────────────────
 void mostrarNuevoTemporizador(BuildContext context) {
   final appState = context.read<AppState>();
   final bool sinFreidoras = appState.freidoras.isEmpty;
   final bool sinProductos = appState.productos.isEmpty;
+  final bool sinEmpleados = appState.empleados.isEmpty;
 
-  // Verificar si faltan datos antes de abrir el formulario
-  if (sinFreidoras || sinProductos) {
-    _mostrarAvisoPrerequisitos(context, sinFreidoras, sinProductos);
+  if (sinFreidoras || sinProductos || sinEmpleados) {
+    _mostrarAvisoPrerequisitos(
+        context, sinFreidoras, sinProductos, sinEmpleados);
     return;
   }
 
@@ -55,18 +57,15 @@ void mostrarNuevoTemporizador(BuildContext context) {
   }
 }
 
-// ── AlertDialog cuando faltan freidoras o productos ─────────────────────────
-void _mostrarAvisoPrerequisitos(
-    BuildContext context, bool sinFreidoras, bool sinProductos) {
-  String mensaje = 'Debes registrar al menos ';
-  if (sinFreidoras && sinProductos) {
-    mensaje += 'una Freidora y un Producto';
-  } else if (sinFreidoras) {
-    mensaje += 'una Freidora';
-  } else {
-    mensaje += 'un Producto';
-  }
-  mensaje += ' antes de crear un temporizador.';
+void _mostrarAvisoPrerequisitos(BuildContext context,
+    bool sinFreidoras, bool sinProductos, bool sinEmpleados) {
+  final List<String> faltantes = [
+    if (sinEmpleados) 'un Empleado',
+    if (sinFreidoras) 'una Freidora',
+    if (sinProductos) 'un Producto',
+  ];
+  final String mensaje =
+      'Debes registrar al menos ${faltantes.join(', ')} antes de crear un temporizador.';
 
   showDialog(
     context: context,
@@ -81,33 +80,38 @@ void _mostrarAvisoPrerequisitos(
       ),
       content: Text(mensaje),
       actions: [
-        // Botón Ir a Freidoras (solo si faltan freidoras)
+        // Ir a Empleados (si faltan)
+        if (sinEmpleados)
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const EmpleadosScreen()));
+            },
+            child: const Text('Ir a Empleados',
+                style: TextStyle(color: Color(0xFFC62828))),
+          ),
+        // Ir a Freidoras (si faltan)
         if (sinFreidoras)
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const FreidorasScreen()),
-              );
+                  MaterialPageRoute(builder: (_) => const FreidorasScreen()));
             },
-            child: const Text(
-              'Ir a Freidoras',
-              style: TextStyle(color: Color(0xFFC62828)),
-            ),
+            child: const Text('Ir a Freidoras',
+                style: TextStyle(color: Color(0xFFC62828))),
           ),
-        // Botón Ir a Productos (solo si faltan productos)
+        // Ir a Productos (si faltan)
         if (sinProductos)
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProductosScreen()),
-              );
+                  MaterialPageRoute(builder: (_) => const ProductosScreen()));
             },
-            child: const Text(
-              'Ir a Productos',
-              style: TextStyle(color: Color(0xFFC62828)),
-            ),
+            child: const Text('Ir a Productos',
+                style: TextStyle(color: Color(0xFFC62828))),
           ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
