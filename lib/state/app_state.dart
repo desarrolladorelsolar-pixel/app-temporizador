@@ -195,6 +195,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Actualiza el badge visual de todas las freidoras según temporizadores activos.
+  /// 'en_uso' si hay algún temporizador corriendo con esa freidora, si no 'activo'.
+  void _actualizarEstadoFreidoras() {
+    final enUsoIds = temporizadores
+        .where((t) => t.corriendo)
+        .map((t) => t.freidora.id)
+        .toSet();
+    for (final f in freidoras) {
+      f.estado = enUsoIds.contains(f.id) ? 'en_uso' : 'activo';
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    // Sincroniza el estado visual de freidoras en cada notificación
+    _actualizarEstadoFreidoras();
+    super.notifyListeners();
+  }
+
   // ── CRUD: PRODUCTOS ────────────────────────────────────────────────────────
 
   Future<void> agregarProducto(Producto p) async {
@@ -393,6 +412,7 @@ class AppState extends ChangeNotifier {
     t.estado = 'coccion';
     t.corriendo = false;
     t.iniciadoEn = null;
+    _actualizarEstadoFreidoras();
   }
 
   void pausarTemporizador(int index) {
@@ -410,6 +430,7 @@ class AppState extends ChangeNotifier {
         estadoAntesPausa: t.estadoAntesDePausa!,
       );
     }
+    _actualizarEstadoFreidoras();
     notifyListeners();
   }
 
@@ -424,6 +445,7 @@ class AppState extends ChangeNotifier {
       await DatabaseHelper.instance.iniciarTemporizador(t.id!, ahora, _logIds[index] ?? 0);
     }
     _timers[index] = Timer.periodic(const Duration(seconds: 1), (_) => _tick(index));
+    _actualizarEstadoFreidoras();
     notifyListeners();
   }
 
@@ -436,6 +458,7 @@ class AppState extends ChangeNotifier {
       await DatabaseHelper.instance.deleteTemporizador(t.id!);
     }
     temporizadores.removeAt(index);
+    _actualizarEstadoFreidoras();
     notifyListeners();
   }
 

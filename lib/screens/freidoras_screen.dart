@@ -32,7 +32,7 @@ class FreidorasScreen extends StatelessWidget {
                 padding: EdgeInsets.symmetric(horizontal: pad, vertical: 12),
                 itemCount: freidoras.length,
                 itemBuilder: (context, i) =>
-                    _TarjetaFreidora(freidora: freidoras[i]),
+                    _TarjetaFreidora(freidora: freidoras[i], index: i),
               ),
       ),
     );
@@ -76,12 +76,21 @@ class FreidorasScreen extends StatelessWidget {
 
 // ── Tarjeta de freidora ───────────────────────────────────────────────────────
 class _TarjetaFreidora extends StatelessWidget {
-  final dynamic freidora;
-  const _TarjetaFreidora({required this.freidora});
+  final Freidora freidora;
+  final int index;
+  const _TarjetaFreidora({required this.freidora, required this.index});
 
   @override
   Widget build(BuildContext context) {
-    final bool activa = freidora.estado == 'activo';
+    final String estado = freidora.estado;
+    final bool enUso   = estado == 'en_uso';
+    final bool activa  = estado == 'activo';
+
+    // Verifica si algún temporizador usa esta freidora
+    final appState = context.read<AppState>();
+    final tieneProductos = appState.temporizadores
+        .any((t) => t.freidora.id == freidora.id);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 1,
@@ -109,36 +118,103 @@ class _TarjetaFreidora extends StatelessWidget {
               color: Color(0xFF212121)),
         ),
         subtitle: Text(
-          freidora.descripcion,
+          freidora.descripcion.isEmpty ? '—' : freidora.descripcion,
           style: const TextStyle(color: Color(0xFF757575), fontSize: 13),
         ),
-        trailing: _Badge(activa: activa),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _Badge(enUso: enUso, activa: activa),
+            // Botón eliminar — solo si está disponible y sin temporizadores
+            if (!enUso && activa)
+              IconButton(
+                icon: Icon(
+                  Icons.delete_outline,
+                  color: tieneProductos
+                      ? Colors.grey[300]
+                      : const Color(0xFFC62828),
+                  size: 20,
+                ),
+                tooltip: tieneProductos
+                    ? 'Tiene temporizadores asociados'
+                    : 'Eliminar',
+                onPressed: tieneProductos
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Eliminá primero los temporizadores que usan esta freidora.'),
+                          ),
+                        )
+                    : () => _confirmarEliminar(context),
+              ),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _confirmarEliminar(BuildContext context) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Eliminar freidora',
+            style: TextStyle(
+                color: Color(0xFFC62828), fontWeight: FontWeight.bold)),
+        content: Text('¿Eliminar "${freidora.codigo}"?\n'
+            'Los registros históricos se conservan.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: Colors.grey[600])),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar',
+                style: TextStyle(
+                    color: Color(0xFFC62828),
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true && context.mounted) {
+      final appState = context.read<AppState>();
+      final idx = appState.freidoras.indexWhere((f) => f.id == freidora.id);
+      if (idx >= 0) appState.eliminarFreidora(idx);
+    }
   }
 }
 
 class _Badge extends StatelessWidget {
+  final bool enUso;
   final bool activa;
-  const _Badge({required this.activa});
+  const _Badge({required this.enUso, required this.activa});
 
   @override
   Widget build(BuildContext context) {
+    final Color bg    = enUso ? const Color(0xFFFFF8E1)
+                      : activa ? const Color(0xFFE8F5E9)
+                      : const Color(0xFFFCEAEA);
+    final Color color = enUso ? const Color(0xFFF57F17)
+                      : activa ? const Color(0xFF2E7D32)
+                      : const Color(0xFFC62828);
+    final String label = enUso ? 'En uso'
+                       : activa ? 'Disponible'
+                       : 'Inactiva';
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: activa ? const Color(0xFFE8F5E9) : const Color(0xFFFCEAEA),
+        color: bg,
         borderRadius: const BorderRadius.all(Radius.circular(20)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Text(
-          activa ? 'Disponible' : 'Inactiva',
-          style: TextStyle(
-            color: activa ? const Color(0xFF2E7D32) : const Color(0xFFC62828),
-            fontWeight: FontWeight.bold,
-            fontSize: 11,
-          ),
-        ),
+        child: Text(label,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.bold, fontSize: 11)),
       ),
     );
   }

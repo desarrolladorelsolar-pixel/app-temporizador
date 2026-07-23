@@ -111,8 +111,7 @@ class DatabaseHelper {
         id_freidora              INTEGER NOT NULL,
         id_producto              INTEGER NOT NULL,
         estado                   TEXT NOT NULL DEFAULT 'detenido'
-          CHECK (estado IN ('detenido','en_curso','pausado','finalizado')),
-        tiempo                   INTEGER NOT NULL,
+          CHECK (estado IN ('detenido','en_curso','pausado','finalizado')),        tiempo                   INTEGER NOT NULL,
         inicio_en                TEXT,
         id_log_activo            INTEGER,
         tiempo_coccion_restante  INTEGER,

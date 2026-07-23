@@ -141,7 +141,7 @@ class _GridTemporizadores extends StatelessWidget {
         crossAxisCount: columnas,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 1.35,
+        childAspectRatio: 0.82, // altura suficiente para header + banda repaso + botón play
       ),
       itemCount: temporizadores.length,
       // addRepaintBoundaries: true ya es el default en GridView.builder
