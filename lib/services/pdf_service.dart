@@ -201,20 +201,38 @@ class PdfService {
 
   static pw.Widget _buildEstadisticasPdf(
       Map<String, dynamic> stats, PdfColor rojo, PdfColor grisMedio) {
-    final int promSeg = stats['promedio_seg'] as int? ?? 0;
-    final int pm = promSeg ~/ 60;
-    final int ps = promSeg % 60;
-    final String prom = promSeg > 0 ? '${pm}m ${ps}s' : '—';
+    final int segB1    = stats['seg_b1']    as int? ?? 0;
+    final int segB2    = stats['seg_b2']    as int? ?? 0;
+    final int segTotal = stats['seg_total'] as int? ?? 0;
+
+    String fmtSeg(int s) {
+      if (s <= 0) return '0m';
+      final h = s ~/ 3600;
+      final m = (s % 3600) ~/ 60;
+      if (h > 0) return '${h}h ${m}m';
+      return '${m}m';
+    }
+
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
         color: const PdfColor.fromInt(0xFFFCEAEA),
         borderRadius: pw.BorderRadius.circular(8),
       ),
-      child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceAround, children: [
-        _statItem('Cocción (B1)', '${stats['total_coccion'] ?? 0}', rojo),
-        _statItem('Tostado (B2)', '${stats['total_tostado'] ?? 0}', rojo),
-        _statItem('Prom. duración', prom, grisMedio),
+      child: pw.Column(children: [
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceAround, children: [
+          _statItem('Cocción (B1)', '${stats['total_coccion'] ?? 0}', rojo),
+          _statItem('Tostado (B2)', '${stats['total_tostado'] ?? 0}', rojo),
+          _statItem('Repasos',      '${stats['total_repaso']  ?? 0}', rojo),
+        ]),
+        pw.SizedBox(height: 6),
+        pw.Divider(color: rojo, thickness: 0.5),
+        pw.SizedBox(height: 6),
+        pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceAround, children: [
+          _statItem('Tiempo B1',   fmtSeg(segB1),   grisMedio),
+          _statItem('Tiempo B2',   fmtSeg(segB2),   grisMedio),
+          _statItem('Total usado', fmtSeg(segTotal), rojo),
+        ]),
       ]),
     );
   }

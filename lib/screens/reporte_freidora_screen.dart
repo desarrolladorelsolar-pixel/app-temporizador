@@ -247,12 +247,22 @@ class _TarjetaEstadisticas extends StatelessWidget {
   final Map<String, dynamic> stats;
   const _TarjetaEstadisticas({required this.stats});
 
+  String _fmtSeg(int seg) {
+    if (seg <= 0) return '0m';
+    final h = seg ~/ 3600;
+    final m = (seg % 3600) ~/ 60;
+    final s = seg % 60;
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0 && s > 0) return '${m}m ${s}s';
+    if (m > 0) return '${m}m';
+    return '${s}s';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final int promSeg = stats['promedio_seg'] as int? ?? 0;
-    final int pm = promSeg ~/ 60;
-    final int ps = promSeg % 60;
-    final String promFmt = promSeg > 0 ? '${pm}m ${ps}s' : '—';
+    final int segB1    = stats['seg_b1']    as int? ?? 0;
+    final int segB2    = stats['seg_b2']    as int? ?? 0;
+    final int segTotal = stats['seg_total'] as int? ?? 0;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -260,14 +270,39 @@ class _TarjetaEstadisticas extends StatelessWidget {
         color: const Color(0xFFFCEAEA),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
         children: [
-          _Stat(label: 'Cocción (B1)', valor: '${stats['total_coccion'] ?? 0}'),
-          const _Divisor(),
-          _Stat(label: 'Tostado (B2)', valor: '${stats['total_tostado'] ?? 0}'),
-          const _Divisor(),
-          _Stat(label: 'Prom. duración', valor: promFmt),
+          // Fila superior: contadores
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _Stat(label: 'Cocción (B1)',
+                  valor: '${stats['total_coccion'] ?? 0}'),
+              const _Divisor(),
+              _Stat(label: 'Tostado (B2)',
+                  valor: '${stats['total_tostado'] ?? 0}'),
+              const _Divisor(),
+              _Stat(label: 'Repasos',
+                  valor: '${stats['total_repaso'] ?? 0}'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFEF9A9A)),
+          const SizedBox(height: 10),
+          // Fila inferior: tiempo total por boquilla y global
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _Stat(label: 'Tiempo B1', valor: _fmtSeg(segB1),
+                  small: true),
+              const _Divisor(),
+              _Stat(label: 'Tiempo B2', valor: _fmtSeg(segB2),
+                  small: true),
+              const _Divisor(),
+              _Stat(label: 'Total usado', valor: _fmtSeg(segTotal),
+                  small: true),
+            ],
+          ),
         ],
       ),
     );
@@ -277,17 +312,18 @@ class _TarjetaEstadisticas extends StatelessWidget {
 class _Stat extends StatelessWidget {
   final String label;
   final String valor;
-  const _Stat({required this.label, required this.valor});
+  final bool small;
+  const _Stat({required this.label, required this.valor, this.small = false});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Text(valor,
-            style: const TextStyle(
-                fontSize: 20,
+            style: TextStyle(
+                fontSize: small ? 16 : 20,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFFC62828))),
+                color: const Color(0xFFC62828))),
         Text(label,
             style: const TextStyle(
                 fontSize: 10, color: Color(0xFFC62828))),

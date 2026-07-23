@@ -410,9 +410,9 @@ class DatabaseHelper {
 
   // ── REPORTES ───────────────────────────────────────────────────────────────
 
-  /// Logs de una freidora específica filtrados por boquilla y/o rango de fechas.
-  /// [boquilla] null = ambas boquillas, 1 = cocción, 2 = tostado.
-  /// [desde] / [hasta] formato YYYY-MM-DD, null = sin límite.
+  /// Logs de una freidora filtrados por boquilla y/o rango de fechas.
+  /// Incluye cocción, tostado Y repaso (tipos 'coccion' y 'repaso').
+  /// [boquilla] null = ambas, 1 = cocción/repaso B1, 2 = tostado/repaso B2.
   Future<List<LogEntry>> getLogsPorFreidora({
     required String nombreFreidora,
     int? boquilla,
@@ -422,7 +422,7 @@ class DatabaseHelper {
     final d = await db;
 
     final List<String> condiciones = [
-      "tipo = 'coccion'",
+      "(tipo = 'coccion' OR tipo = 'repaso')",  // incluye repaso
       "nombre_freidora = ?",
     ];
     final List<dynamic> args = [nombreFreidora];
@@ -450,8 +450,10 @@ class DatabaseHelper {
     return rows.map(LogEntry.fromMap).toList();
   }
 
-  /// Estadísticas agregadas para el reporte de una freidora.
-  /// Devuelve: totalCoccion, totalTostado, promedioSegundos.
+  /// Estadísticas para el reporte de freidora.
+  /// Devuelve: totalCoccion, totalTostado, totalRepaso,
+  ///           totalSegB1 (cocción+repaso B1), totalSegB2 (tostado+repaso B2),
+  ///           totalSegGeneral (suma total de todos los tiempos).
   Future<Map<String, dynamic>> getEstadisticasFreidora({
     required String nombreFreidora,
     String? desde,
@@ -459,35 +461,50 @@ class DatabaseHelper {
   }) async {
     final d = await db;
 
-    String where = "tipo = 'coccion' AND nombre_freidora = ? AND fecha_hora_fin IS NOT NULL";
+    String where =
+        "(tipo = 'coccion' OR tipo = 'repaso') "
+        "AND nombre_freidora = ? "
+        "AND fecha_hora_fin IS NOT NULL";
     final List<dynamic> args = [nombreFreidora];
 
-    if (desde != null) {
-      where += " AND fecha_hora_inicio >= '${desde}T00:00:00'";
-    }
-    if (hasta != null) {
-      where += " AND fecha_hora_inicio <= '${hasta}T23:59:59'";
-    }
+    if (desde != null) where += " AND fecha_hora_inicio >= '${desde}T00:00:00'";
+    if (hasta != null) where += " AND fecha_hora_inicio <= '${hasta}T23:59:59'";
 
     final rows = await d.rawQuery('''
       SELECT
-        SUM(CASE WHEN boquilla = 1 THEN 1 ELSE 0 END) AS total_coccion,
-        SUM(CASE WHEN boquilla = 2 THEN 1 ELSE 0 END) AS total_tostado,
-        CAST(AVG(
+        SUM(CASE WHEN tipo = 'coccion' AND boquilla = 1 THEN 1 ELSE 0 END)
+            AS total_coccion,
+        SUM(CASE WHEN tipo = 'coccion' AND boquilla = 2 THEN 1 ELSE 0 END)
+            AS total_tostado,
+        SUM(CASE WHEN tipo = 'repaso' THEN 1 ELSE 0 END)
+            AS total_repaso,
+        CAST(SUM(CASE WHEN boquilla = 1
+          THEN (julianday(fecha_hora_fin) - julianday(fecha_hora_inicio)) * 86400
+          ELSE 0 END) AS INTEGER) AS seg_b1,
+        CAST(SUM(CASE WHEN boquilla = 2
+          THEN (julianday(fecha_hora_fin) - julianday(fecha_hora_inicio)) * 86400
+          ELSE 0 END) AS INTEGER) AS seg_b2,
+        CAST(SUM(
           (julianday(fecha_hora_fin) - julianday(fecha_hora_inicio)) * 86400
-        ) AS INTEGER) AS promedio_seg
+        ) AS INTEGER) AS seg_total
       FROM log
       WHERE $where
     ''', args);
 
     if (rows.isEmpty) {
-      return {'total_coccion': 0, 'total_tostado': 0, 'promedio_seg': 0};
+      return {
+        'total_coccion': 0, 'total_tostado': 0, 'total_repaso': 0,
+        'seg_b1': 0, 'seg_b2': 0, 'seg_total': 0,
+      };
     }
     final r = rows.first;
     return {
       'total_coccion': r['total_coccion'] as int? ?? 0,
       'total_tostado': r['total_tostado'] as int? ?? 0,
-      'promedio_seg': r['promedio_seg'] as int? ?? 0,
+      'total_repaso':  r['total_repaso']  as int? ?? 0,
+      'seg_b1':        r['seg_b1']        as int? ?? 0,
+      'seg_b2':        r['seg_b2']        as int? ?? 0,
+      'seg_total':     r['seg_total']     as int? ?? 0,
     };
   }
 }
