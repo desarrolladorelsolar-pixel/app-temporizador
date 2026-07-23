@@ -8,21 +8,30 @@ import '../widgets/employee_chip.dart';
 import '../widgets/new_timer_modal.dart';
 import '../widgets/timer_card.dart';
 
-// ── Pantalla principal ───────────────────────────────────────────────────────
-// Optimización de rebuilds:
-// - El scaffold y AppBar son const o casi-const → no se reconstruyen.
-// - _ChipsEmpleados usa context.select solo sobre la lista de empleados.
-// - _GridTemporizadores usa context.select solo sobre temporizadores.
-// Así, cada tick del timer (notifyListeners cada 1s) solo reconstruye
-// las TimerCard individuales, no toda la pantalla.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final double anchoPantalla = MediaQuery.of(context).size.width;
-    final bool esTablet = anchoPantalla >= 600;
-    final double pad = esTablet ? 32.0 : 16.0;
+    final mq = MediaQuery.of(context);
+    final double ancho = mq.size.width;
+    final bool esLandscape = mq.orientation == Orientation.landscape;
+    final bool esTablet = ancho >= 600;
+
+    // Padding lateral adaptativo
+    final double pad = esTablet ? 24.0 : 12.0;
+
+    // Columnas según orientación y tamaño
+    // Portrait móvil: 2 | Landscape móvil: 3 | Tablet portrait: 3 | Tablet landscape: 4
+    final int columnas = esTablet
+        ? (esLandscape ? 4 : 3)
+        : (esLandscape ? 3 : 2);
+
+    // Aspect ratio según orientación
+    // En landscape las cards son más anchas → necesitan menos altura relativa
+    final double aspectRatio = esTablet
+        ? (esLandscape ? 1.0 : 0.85)
+        : (esLandscape ? 1.1 : 0.82);
 
     return Scaffold(
       appBar: AppBarPrincipal(
@@ -35,26 +44,28 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Personal en turno ─────────────────────────────────────
+            // ── Personal en turno ─────────────────────────────────────────
             Padding(
-              padding: EdgeInsets.fromLTRB(pad, 16, pad, 0),
+              padding: EdgeInsets.fromLTRB(pad, 12, pad, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const _TituloSeccion(texto: 'PERSONAL EN TURNO'),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _ChipsEmpleados(pad: pad),
-                  const SizedBox(height: 20),
+                  SizedBox(height: esLandscape ? 8 : 14),
                   const _TituloSeccion(texto: 'TEMPORIZADORES'),
                   const SizedBox(height: 4),
                 ],
               ),
             ),
-            // ── Grid temporizadores ───────────────────────────────────
+
+            // ── Grid temporizadores ───────────────────────────────────────
             Expanded(
               child: _GridTemporizadores(
                 pad: pad,
-                columnas: anchoPantalla >= 900 ? 3 : 2,
+                columnas: columnas,
+                aspectRatio: aspectRatio,
               ),
             ),
           ],
@@ -64,7 +75,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ── Chips de empleados — solo se reconstruye cuando cambia la lista ──────────
+// ── Chips de empleados ────────────────────────────────────────────────────────
 class _ChipsEmpleados extends StatefulWidget {
   final double pad;
   const _ChipsEmpleados({required this.pad});
@@ -79,8 +90,6 @@ class _ChipsEmpleadosState extends State<_ChipsEmpleados> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Sincronizar el índice visual con el empleadoActivo en AppState
-    // (por si se cargó desde BD con un empleado ya seleccionado)
     final appState = context.read<AppState>();
     if (appState.empleadoActivo != null && appState.empleados.isNotEmpty) {
       final idx = appState.empleados
@@ -95,10 +104,8 @@ class _ChipsEmpleadosState extends State<_ChipsEmpleados> {
     final empleados = appState.empleados;
 
     if (empleados.isEmpty) {
-      return Text(
-        'Sin empleados registrados',
-        style: TextStyle(color: Colors.grey[400], fontSize: 13),
-      );
+      return Text('Sin empleados registrados',
+          style: TextStyle(color: Colors.grey[400], fontSize: 13));
     }
 
     return SingleChildScrollView(
@@ -111,7 +118,6 @@ class _ChipsEmpleadosState extends State<_ChipsEmpleados> {
             seleccionado: _seleccionado == i,
             onTap: () {
               setState(() => _seleccionado = i);
-              // Notificar al AppState quién está seleccionado
               context.read<AppState>().seleccionarEmpleado(empleados[i]);
             },
           ),
@@ -121,13 +127,17 @@ class _ChipsEmpleadosState extends State<_ChipsEmpleados> {
   }
 }
 
-// ── Grid de temporizadores — se reconstruye con cada tick del timer ──────────
-// Cada TimerCard es StatefulWidget y maneja su propio estado visual.
+// ── Grid temporizadores ───────────────────────────────────────────────────────
 class _GridTemporizadores extends StatelessWidget {
   final double pad;
   final int columnas;
+  final double aspectRatio;
 
-  const _GridTemporizadores({required this.pad, required this.columnas});
+  const _GridTemporizadores({
+    required this.pad,
+    required this.columnas,
+    required this.aspectRatio,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -139,12 +149,11 @@ class _GridTemporizadores extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(pad, 8, pad, 20),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: columnas,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.82, // altura suficiente para header + banda repaso + botón play
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: aspectRatio,
       ),
       itemCount: temporizadores.length,
-      // addRepaintBoundaries: true ya es el default en GridView.builder
       itemBuilder: (context, i) => TimerCard(
         temporizador: temporizadores[i],
         index: i,
@@ -153,7 +162,7 @@ class _GridTemporizadores extends StatelessWidget {
   }
 }
 
-// ── Título de sección ────────────────────────────────────────────────────────
+// ── Título de sección ─────────────────────────────────────────────────────────
 class _TituloSeccion extends StatelessWidget {
   final String texto;
   const _TituloSeccion({required this.texto});
