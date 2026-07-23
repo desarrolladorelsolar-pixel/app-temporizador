@@ -60,6 +60,10 @@ class _TarjetaProducto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
+    final tieneTemp = appState.temporizadores
+        .any((t) => t.producto.id == producto.id);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 1,
@@ -77,31 +81,82 @@ class _TarjetaProducto extends StatelessWidget {
           child: const Icon(Icons.fastfood,
               color: Color(0xFFC62828), size: 22),
         ),
-        title: Text(
-          producto.nombre,
-          style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: Color(0xFF212121)),
-        ),
+        title: Text(producto.nombre,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: Color(0xFF212121))),
         subtitle: Text(
           'B1 Cocción: ${producto.tiempoCoccion} min · B2 Tostado: ${producto.tiempoTostado} min'
           '${producto.tiempoRepaso > 0 ? ' · Repaso: ${producto.tiempoRepaso} min' : ''}',
           style: TextStyle(color: Colors.grey[600], fontSize: 13),
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.edit_outlined,
-              color: Color(0xFFC62828), size: 20),
-          tooltip: 'Editar',
-          onPressed: () => _ProductosScreenHelper.mostrarModal(
-            context,
-            esTablet: esTablet,
-            producto: producto,
-            index: index,
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined,
+                  color: Color(0xFFC62828), size: 20),
+              tooltip: 'Editar',
+              onPressed: () => _ProductosScreenHelper.mostrarModal(
+                context,
+                esTablet: esTablet,
+                producto: producto,
+                index: index,
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete_outline,
+                  color: tieneTemp
+                      ? Colors.grey[300]
+                      : const Color(0xFFC62828),
+                  size: 20),
+              tooltip: tieneTemp
+                  ? 'Tiene temporizadores asociados'
+                  : 'Eliminar',
+              onPressed: tieneTemp
+                  ? () => ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Eliminá primero los temporizadores que usan este producto.',
+                          ),
+                        ),
+                      )
+                  : () => _confirmarEliminar(context),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmarEliminar(BuildContext context) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Eliminar producto',
+            style: TextStyle(color: Color(0xFFC62828),
+                fontWeight: FontWeight.bold, fontSize: 17)),
+        content: Text('¿Eliminar "${producto.nombre}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: Colors.grey[600])),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar',
+                style: TextStyle(color: Color(0xFFC62828),
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar == true && context.mounted) {
+      context.read<AppState>().eliminarProducto(index);
+    }
   }
 }
 

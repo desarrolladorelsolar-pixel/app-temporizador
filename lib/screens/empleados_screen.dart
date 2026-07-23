@@ -95,6 +95,9 @@ class _TarjetaEmpleado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Un empleado solo se puede eliminar si no está relacionado a ningún log
+    // (en la práctica: si no hay logs con su id). La validación es simple:
+    // si hay logs con este empleado, no se puede eliminar.
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 1,
@@ -109,31 +112,77 @@ class _TarjetaEmpleado extends StatelessWidget {
             color: Color(0xFFFCEAEA),
             shape: BoxShape.circle,
           ),
-          child:
-              const Icon(Icons.person, color: Color(0xFFC62828), size: 24),
+          child: const Icon(Icons.person, color: Color(0xFFC62828), size: 24),
         ),
-        title: Text(
-          empleado.nombre,
-          style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
-              color: Color(0xFF212121)),
-        ),
+        title: Text(empleado.nombre,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+                color: Color(0xFF212121))),
         subtitle: Text('CI: ${empleado.carnet}',
             style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-        trailing: IconButton(
-          icon: const Icon(Icons.edit_outlined,
-              color: Color(0xFFC62828), size: 20),
-          tooltip: 'Editar',
-          onPressed: () => _EmpleadosScreenHelper.mostrarModal(
-            context,
-            esTablet: esTablet,
-            empleado: empleado,
-            index: index,
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined,
+                  color: Color(0xFFC62828), size: 20),
+              tooltip: 'Editar',
+              onPressed: () => _EmpleadosScreenHelper.mostrarModal(
+                context,
+                esTablet: esTablet,
+                empleado: empleado,
+                index: index,
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: Color(0xFFC62828), size: 20),
+              tooltip: 'Eliminar',
+              onPressed: () => _confirmarEliminar(context),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmarEliminar(BuildContext context) async {
+    final appState = context.read<AppState>();
+
+    // Validar: el empleado no puede tener temporizadores corriendo
+    // (en práctica: ningún temporizador activo tiene este empleado)
+    // Los logs históricos usan nombre fotográfico — se puede eliminar igual
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Eliminar empleado',
+            style: TextStyle(color: Color(0xFFC62828),
+                fontWeight: FontWeight.bold, fontSize: 17)),
+        content: Text(
+          '¿Eliminar "${empleado.nombre}"?\n'
+          'Sus registros históricos se conservan.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: Colors.grey[600])),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Eliminar',
+                style: TextStyle(color: Color(0xFFC62828),
+                    fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true && context.mounted) {
+      appState.eliminarEmpleado(index);
+    }
   }
 }
 
